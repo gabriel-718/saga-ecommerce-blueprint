@@ -1,0 +1,26 @@
+flowchart TB
+  C["Cliente / API<br/>POST /orders -> 202 PENDING<br/>GET /orders/{id}"]
+  S["Saga Orchestrator<br/>timers, version, reconciliação<br/>Inbox + Outbox + Saga DB"]
+  G["Gateway financeiro<br/>cobrança, consulta e estorno"]
+  B[("RabbitMQ<br/>commands + events<br/>quorum, ack, DLQ")]
+  O["Order Service<br/>PENDING -> CONFIRMED / CANCELLED"]
+  I["Inventory Service<br/>HELD -> ALLOCATED<br/>RELEASED / EXPIRED"]
+  P["Payment Service<br/>ChargePayment / RefundPayment<br/>idempotência externa"]
+  OD[("Order DB<br/>Inbox + Outbox")]
+  ID[("Inventory DB<br/>Inbox + Outbox")]
+  PD[("Payment DB<br/>Inbox + Outbox")]
+  C -->|HTTP síncrono| O
+  S <-->|commands / results assíncronos| B
+  O <-->|OrderCreated / ConfirmOrder / CancelOrder| B
+  I <-->|Reserve / Allocate / Release| B
+  P <-->|Charge / Refund / status| B
+  P <-->|HTTPS síncrono| G
+  O --> OD
+  I --> ID
+  P --> PD
+  classDef svc fill:#edf5ff,stroke:#5f7faf,color:#16243A
+  classDef hub fill:#e9f8f4,stroke:#0F766E,color:#16243A
+  classDef coord fill:#f2edfb,stroke:#6955A8,color:#16243A
+  class O,I,P svc
+  class S coord
+  class B hub

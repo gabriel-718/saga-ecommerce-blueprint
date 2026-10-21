@@ -1,0 +1,49 @@
+@startuml
+skinparam backgroundColor #F7F9FC
+skinparam sequence {
+  ArrowColor #4765A1
+  LifeLineBorderColor #B4C2DB
+  ParticipantBorderColor #A6B5C7
+  ParticipantBackgroundColor #FFFFFF
+}
+title Fluxo de sucesso: Saga orquestrada
+autonumber
+actor "Cliente" as C
+participant "Order Service" as O
+queue "RabbitMQ" as B
+participant "Saga Orchestrator" as S
+participant "Inventory Service" as I
+participant "Payment Service" as P
+participant "Gateway Financeiro" as G
+
+legend bottom
+  Setas assíncronas passam pelo RabbitMQ.
+  HTTP do cliente e HTTPS com o gateway são síncronos.
+endlegend
+
+C -> O: POST /orders (Idempotency-Key)
+O --> C: 202 Accepted (PENDING)
+O ->> B: OrderCreated (Outbox Relay)
+B ->> S: OrderCreated
+S ->> B: ReserveStock
+B ->> I: ReserveStock
+I ->> B: StockReserved(reservationId, expiresAt)
+B ->> S: StockReserved
+S ->> B: ChargePayment(paymentOperationId)
+B ->> P: ChargePayment
+P -> G: HTTPS cobrança + chave idempotente
+G --> P: CHARGED(transactionId)
+P ->> B: PaymentCharged
+B ->> S: PaymentCharged
+S ->> B: AllocateStock(reservationId)
+B ->> I: AllocateStock
+I ->> B: StockAllocated
+B ->> S: StockAllocated
+S ->> B: ConfirmOrder
+B ->> O: ConfirmOrder
+O ->> B: OrderConfirmed
+B ->> S: OrderConfirmed (Saga COMPLETED)
+C -> O: GET /orders/{id}
+O --> C: CONFIRMED
+
+@enduml

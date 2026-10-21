@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant O as Order Service
+    participant B as RabbitMQ
+    participant S as Saga Orchestrator
+    participant I as Inventory Service
+    participant P as Payment Service
+    participant G as Gateway
+    C->>O: POST /orders (Idempotency-Key)
+    Note over O: Commit local Order(PENDING) + Outbox(OrderCreated)
+    O-->>C: 202 Accepted (PENDING)
+    O-->>B: OrderCreated (Outbox Relay)
+    B-->>S: OrderCreated
+    S-->>B: ReserveStock
+    B-->>I: ReserveStock
+    Note over I: Reserva atômica HELD com TTL
+    I-->>B: StockReserved(reservationId, expiresAt)
+    B-->>S: StockReserved
+    S-->>B: ChargePayment(paymentOperationId)
+    B-->>P: ChargePayment
+    P->>G: HTTPS cobrança + chave idempotente
+    G-->>P: CHARGED(transactionId)
+    P-->>B: PaymentCharged
+    B-->>S: PaymentCharged
+    S-->>B: AllocateStock(reservationId)
+    B-->>I: AllocateStock
+    Note over I: Commit local HELD válido -> ALLOCATED sem TTL
+    I-->>B: StockAllocated
+    B-->>S: StockAllocated
+    S-->>B: ConfirmOrder
+    B-->>O: ConfirmOrder
+    Note over O: Commit local CONFIRMED + Outbox
+    O-->>B: OrderConfirmed
+    B-->>S: OrderConfirmed (Saga COMPLETED)
+    C->>O: GET /orders/{id}
+    O-->>C: CONFIRMED
+    Note over O,S: Alocação não permite expedir antes de OrderConfirmed

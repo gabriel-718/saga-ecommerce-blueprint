@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant O as Order Service
+    participant B as RabbitMQ
+    participant S as Saga Orchestrator
+    participant I as Inventory Service
+    participant P as Payment Service
+    participant G as Gateway
+    C->>O: POST /orders
+    O-->>C: 202 Accepted / PENDING
+    O-->>B: OrderCreated (Outbox)
+    B-->>S: OrderCreated
+    S-->>B: ReserveStock
+    B-->>I: ReserveStock
+    I-->>B: StockReserved(HELD)
+    B-->>S: StockReserved
+    S-->>B: ChargePayment
+    B-->>P: ChargePayment
+    P->>G: Cobrar via HTTPS, chave idempotente
+    G-->>P: DECLINED final, nenhum débito
+    P-->>B: PaymentDeclined
+    B-->>S: PaymentDeclined (WAITING_RELEASE)
+    rect rgb(255, 246, 235)
+      Note over S,I: Compensação em ordem inversa - sem RefundPayment
+      S-->>B: ReleaseStock(reservationId)
+      B-->>I: ReleaseStock
+      I-->>B: StockReleased(RELEASED)
+      B-->>S: StockReleased
+      S-->>B: CancelOrder
+      B-->>O: CancelOrder
+      O-->>B: OrderCancelled(CANCELLED)
+      B-->>S: OrderCancelled (COMPENSATED)
+    end
+    Note over S,O: Pedido PENDING -> CANCELLED. Pagamento recusado: sem estorno.

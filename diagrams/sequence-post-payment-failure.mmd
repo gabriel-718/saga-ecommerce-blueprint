@@ -1,0 +1,48 @@
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant O as Order Service
+    participant B as RabbitMQ
+    participant S as Saga Orchestrator
+    participant I as Inventory Service
+    participant P as Payment Service
+    participant G as Gateway
+    C->>O: POST /orders
+    O-->>C: 202 PENDING
+    O-->>B: OrderCreated
+    B-->>S: OrderCreated
+    S-->>B: ReserveStock
+    B-->>I: ReserveStock
+    I-->>B: StockReserved
+    B-->>S: StockReserved
+    S-->>B: ChargePayment
+    B-->>P: ChargePayment
+    P->>G: Cobrança HTTPS (idempotente)
+    G-->>P: CHARGED
+    P-->>B: PaymentCharged
+    B-->>S: PaymentCharged
+    S-->>B: AllocateStock
+    B-->>I: AllocateStock
+    I-->>B: StockAllocated (não expede)
+    B-->>S: StockAllocated
+    S-->>B: ConfirmOrder
+    B-->>O: ConfirmOrder
+    O-->>B: OrderConfirmationRejected (definitivo)
+    B-->>S: Rejeição comprovada (não timeout)
+    rect rgb(255, 245, 227)
+      S-->>B: RefundPayment
+      B-->>P: RefundPayment
+      P->>G: Solicita estorno idempotente
+      G-->>P: REFUNDED confirmado
+      P-->>B: PaymentRefunded
+      B-->>S: PaymentRefunded
+      S-->>B: ReleaseStock
+      B-->>I: ReleaseStock (ALLOCATED -> RELEASED)
+      I-->>B: StockReleased
+      B-->>S: StockReleased
+      S-->>B: CancelOrder
+      B-->>O: CancelOrder
+      O-->>B: OrderCancelled
+      B-->>S: OrderCancelled -> COMPENSATED
+    end
+    Note over S,O: Timeout de ConfirmOrder exige consulta antes do refund

@@ -1,0 +1,28 @@
+flowchart TB
+  A["OrderCreated"] --> B["WAITING_STOCK"]
+  B -->|StockReserved| C["WAITING_PAYMENT"]
+  B -->|StockReservationRejected| Z["WAITING_CANCEL"]
+  C -->|PaymentDeclined definitivo| Y["WAITING_RELEASE"]
+  C -->|PaymentCharged| D["WAITING_ALLOCATE"]
+  D -->|StockAllocated| E["WAITING_ORDER"]
+  D -->|StockAllocationRejected| X["WAITING_REFUND"]
+  E -->|OrderConfirmed| F["COMPLETED"]
+  E -->|Rejeição final comprovada| X
+  X -->|PaymentRefunded| Y
+  Y -->|StockReleased| Z
+  Z -->|OrderCancelled| H["COMPENSATED"]
+  B & C & D & E & X & Y & Z -. timeout .-> R["RECONCILING"]
+  R -->|status consultado| B
+  R -->|status consultado| C
+  R -->|status consultado| D
+  R -->|status consultado| E
+  R -->|status consultado| X
+  R -->|status consultado| Y
+  R -->|status consultado| Z
+  R -->|indefinido persistente| N["ACTION_REQUIRED"]
+  classDef success fill:#e9f8f4,stroke:#08776c,color:#132c28
+  classDef danger fill:#fff1e6,stroke:#aa6a28,color:#4c3020
+  classDef warn fill:#f2edfc,stroke:#6d56a7,color:#292147
+  class F success
+  class X,Y,Z,H danger
+  class R,N warn

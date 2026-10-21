@@ -1,0 +1,47 @@
+@startuml
+skinparam backgroundColor #F7F9FC
+skinparam sequence {
+  ArrowColor #4765A1
+  LifeLineBorderColor #B4C2DB
+  ParticipantBorderColor #A6B5C7
+  ParticipantBackgroundColor #FFFFFF
+}
+title Pagamento recusado: liberar e cancelar
+autonumber
+actor "Cliente" as C
+participant "Order Service" as O
+queue "RabbitMQ" as B
+participant "Saga Orchestrator" as S
+participant "Inventory Service" as I
+participant "Payment Service" as P
+participant "Gateway Financeiro" as G
+
+legend bottom
+  Setas assíncronas passam pelo RabbitMQ.
+  HTTP do cliente e HTTPS com o gateway são síncronos.
+endlegend
+
+C -> O: POST /orders
+O --> C: 202 Accepted / PENDING
+O ->> B: OrderCreated (Outbox)
+B ->> S: OrderCreated
+S ->> B: ReserveStock
+B ->> I: ReserveStock
+I ->> B: StockReserved(HELD)
+B ->> S: StockReserved
+S ->> B: ChargePayment
+B ->> P: ChargePayment
+P -> G: Cobrar via HTTPS, chave idempotente
+G --> P: DECLINED final, nenhum débito
+P ->> B: PaymentDeclined
+B ->> S: PaymentDeclined (WAITING_RELEASE)
+S ->> B: ReleaseStock(reservationId)
+B ->> I: ReleaseStock
+I ->> B: StockReleased(RELEASED)
+B ->> S: StockReleased
+S ->> B: CancelOrder
+B ->> O: CancelOrder
+O ->> B: OrderCancelled(CANCELLED)
+B ->> S: OrderCancelled (COMPENSATED)
+
+@enduml

@@ -1,0 +1,32 @@
+@startuml
+skinparam backgroundColor #F7F9FC
+skinparam componentStyle rectangle
+skinparam shadowing false
+left to right direction
+actor "Cliente / API" as C
+component "Order Service\nPENDING / CONFIRMED / CANCELLED" as O
+component "Inventory Service\nHELD / ALLOCATED / EXPIRED / RELEASED" as I
+component "Payment Service\nCharge / Refund / Check" as P
+component "Saga Orchestrator\nEstado durável / timers" as S
+queue "RabbitMQ\nQuorum + DLQ" as B
+cloud "Gateway financeiro" as G
+database "Order DB\nInbox + Outbox" as OD
+database "Inventory DB\nInbox + Outbox" as ID
+database "Payment DB\nInbox + Outbox" as PD
+database "Saga DB\nInbox + Outbox" as SD
+C <--> O : HTTP síncrono
+O <--> B : mensagens
+I <--> B : mensagens
+P <--> B : mensagens
+S <--> B : mensagens
+P <--> G : HTTPS síncrono
+O --> OD : transações locais
+I --> ID : transações locais
+P --> PD : transações locais
+S --> SD : transações locais
+note bottom of B
+  Entrega at-least-once,
+  publisher confirms, ACK manual
+  e mensagens idempotentes.
+end note
+@enduml
